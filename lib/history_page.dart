@@ -1,18 +1,80 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'map_page.dart';
+import '../map_page.dart';
+import 'months.dart';
 
 class HistoryPage extends StatefulWidget {
-  final List<ListItem> items;
+  final String userRole;
+  final List<ListItem> items = List<ListItem>.empty(growable: true);
+  var datesMap = <String, List<String>>{};
 
-  const HistoryPage({super.key, required this.items});
+  HistoryPage({super.key, required this.userRole});
 
   @override
   _HistoryPageState createState() => _HistoryPageState();
 }
 
 class _HistoryPageState extends State<HistoryPage> {
+
+  @override
+  void initState() {
+    super.initState();
+    getHistory();
+  }
+
+  void getHistory() {
+    var historicalData = FirebaseFirestore.instance.collection('WeatherData');
+    historicalData.get().then((QuerySnapshot querySnapshot) {
+      var reversedDocs = querySnapshot.docs.reversed.toList();
+      for (var doc in reversedDocs) {
+        handleDate(doc);
+      }
+    });
+  }
+
+  void handleDate(doc) {
+    if (widget.userRole == "admin") {
+      var dateList = List<ListItem>.empty(growable: true);
+      var date = doc['date'];
+      date = date.replaceAll("-", " ");
+
+      var datePieces = date.split(" ");
+      var month = getMonths(datePieces[1]);
+      date = [datePieces[2], month, datePieces[0], datePieces[3]].join(" ");
+      dateList.add(DateItem(date));
+      for (var city in doc['cities']) {
+        dateList.add(TemperatureItem(city['name'], city['temperature']));
+      }
+      setState(() {
+        widget.items.addAll(dateList);
+      });
+    }
+    else if (widget.userRole == "normal") {
+      var dateList = List<ListItem>.empty(growable: true);
+      var newDate = doc['date'];
+      var datePieces = newDate.split("-");
+      var day = datePieces[2][0] + datePieces[2][1];
+      var month = getMonths(datePieces[1]);
+      newDate = [month, day].join(" ");
+      if (!widget.datesMap.keys.contains(newDate)) {
+        dateList.add(DateItem(newDate));
+        widget.datesMap[newDate] = [];
+      }
+      for (var city in doc['cities']) {
+        if(!widget.datesMap[newDate]!.contains(city['name'])) {
+          dateList.add(TemperatureItem(city['name'], city['temperature']));
+          widget.datesMap[newDate]?.add(city['name']);
+        }
+      }
+      setState(() {
+        widget.items.addAll(dateList);
+      });
+    }
+
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,10 +109,12 @@ class _HistoryPageState extends State<HistoryPage> {
                         )
                     )
                 ),
-                ConstrainedBox(
+                /*ConstrainedBox(
                     constraints: const BoxConstraints(
                       maxHeight: 580
-                    ),
+                    ),*/
+                Expanded(
+                  flex: 4,
                   child: ListView.builder(
                       scrollDirection: Axis.vertical,
                       shrinkWrap: true,
@@ -63,10 +127,11 @@ class _HistoryPageState extends State<HistoryPage> {
                   )
                 ),
                 Expanded(
+                  flex: 1,
                     child: Align(
                       alignment: Alignment.bottomCenter,
                       child: Padding(
-                          padding: const EdgeInsets.only(left: 30, right: 30, top: 16, bottom: 45),
+                          padding: const EdgeInsets.only(left: 30, right: 30, top: 16, bottom: 25),
                           child: TextButton(
                               style: TextButton.styleFrom(
                                 foregroundColor: Colors.white, backgroundColor: const Color(0xFF8cc7ff),
@@ -74,7 +139,7 @@ class _HistoryPageState extends State<HistoryPage> {
                               ),
                               onPressed: () {
                                 Navigator.push(context, MaterialPageRoute(builder:
-                                    (context) => const MapPage()));
+                                    (context) => MapPage(userRole: widget.userRole)));
                               },
                               child: Text(
                                   "See map",
@@ -160,13 +225,20 @@ class TemperatureItem implements ListItem {
                     padding: EdgeInsets.only(left: 16),
                     child: Image(image: AssetImage('assets/images/cloud.png'))
                 ),
-                Text(
-                    city,
-                    style: GoogleFonts.poppins(
-                      color: const Color(0xFF000000),
-                      fontSize: 20,
-                      fontWeight: FontWeight.w500,
-                    )
+                Expanded(
+                    child:
+                        Padding(
+                            padding: const EdgeInsets.only(left: 16),
+                            child:
+                                Text(
+                                    city,
+                                    style: GoogleFonts.poppins(
+                                      color: const Color(0xFF000000),
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w500,
+                                    )
+                                ),
+                        )
                 ),
                 Padding(
                     padding: const EdgeInsets.only(right: 16),
